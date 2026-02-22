@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-url = os.getenv("TEST_SERVER")
+url = "http://localhost:8080/github-webhook/fff"
 data = {
     "action": "opened",
     "issue": {

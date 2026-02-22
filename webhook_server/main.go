@@ -1,151 +1,25 @@
 package main
 
 import (
-	"bytes"
+	"GitTracker/dispatcher"
+	"GitTracker/grpc"
+	"GitTracker/handlers"
+	pb "GitTracker/proto"
+	"GitTracker/webhook"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-
-	"github.com/joho/godotenv"
+	"time"
 )
 
-func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Print("No .env file found")
-	}
-}
-
-type github_issue struct {
-	Url    string `json:"url"`
-	Number int    `json:"number"`
-}
-type github_owner struct {
-	Login string `json:"login"`
-	Id    int    `json:"id"`
-}
-
-type github_repository struct {
-	Id        int          `json:"id"`
-	Full_name string       `json:"full_name"`
-	Html_url  string       `json:"html_url"`
-	Owner     github_owner `json:"owner"`
-}
-
-type github_sender struct {
-	Url        string `json:"url"`
-	Login      string `json:"login"`
-	Id         int    `json:"id"`
-	Avatar_url string `json:"avatar_url"`
-}
-
-type github_head_commit struct {
-	Url      string   `json:"url"`
-	Message  string   `json:"message"`
-	Added    []string `json:"added"`
-	Removed  []string `json:"removed"`
-	Modified []string `json:"modified"`
-}
-
-type github_webhook struct {
-	Id          string
-	Action      string             `json:"action"`
-	Issue       github_issue       `json:"issue"`
-	Repository  github_repository  `json:"repository"`
-	Sender      github_sender      `json:"sender"`
-	Private     bool               `json:"private"`
-	Full_name   string             `json:"full_name"`
-	Head_commit github_head_commit `json:"head_commit"`
-}
-
-type Response struct {
-	Id            string
-	Event         string `json:"message"`
-	Rep_name      string `json:"rep_name"`
-	Rep_link      string `json:"rep_link"`
-	Author        string `json:"author"`
-	Author_url    string `json:"author_url"`
-	Author_avatar string `json:"avatar_url"`
-	Comment       string `json:"comment"`
-}
-
-type WebhookDispatcher struct {
-	handlers map[string]func(payload *github_webhook) error
-}
-
-func NewWebhookDispatcher() *WebhookDispatcher {
-	return &WebhookDispatcher{
-		handlers: make(map[string]func(payload *github_webhook) error),
-	}
-}
-
-func (d *WebhookDispatcher) RegisterHandler(action string, handler func(payload *github_webhook) error) {
-	d.handlers[action] = handler
-}
-
-func (d *WebhookDispatcher) Handle(action string, payload *github_webhook) error {
-	if handler, exists := d.handlers[action]; exists {
-		return handler(payload)
-	}
-	return fmt.Errorf("no handler found for action: %s", action)
-}
-
-func setupHandlers() *WebhookDispatcher {
-	dispatcher := NewWebhookDispatcher()
-
-	dispatcher.RegisterHandler("opened", opened)
-	dispatcher.RegisterHandler("push", commit)
+func setupHandlers() *dispatcher.WebhookDispatcher {
+	dispatcher := dispatcher.NewWebhookDispatcher()
+	dispatcher.RegisterHandler("push", handlers.Push)
 	return dispatcher
 }
 
-func commit(payload *github_webhook) error {
-
-	event := "Сделан коммит"
-	repository_name := payload.Repository.Full_name
-	rep_link := payload.Repository.Html_url
-	author_name := payload.Sender.Login
-	author_url := payload.Sender.Url
-	avatar_url := payload.Sender.Avatar_url
-	comment := payload.Head_commit.Message
-
-	rep := Response{
-		Id:            payload.Id,
-		Event:         event,
-		Author:        author_name,
-		Author_url:    author_url,
-		Author_avatar: avatar_url,
-		Rep_name:      repository_name,
-		Rep_link:      rep_link,
-		Comment:       comment,
-	}
-
-	jsonData, err := json.Marshal(rep)
-	if err != nil {
-		return err
-	}
-	resp, err := http.Post(
-		os.Getenv("BOT_URL"),
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
-	if err != nil {
-		fmt.Println("Ошибка при отправке запроса:", err)
-		return err
-	}
-	defer resp.Body.Close()
-	return err
-}
-
-func opened(payload *github_webhook) error {
-	message := "Открыт вопрос"
-	repository_name := payload.Repository.Full_name
-	issue_url := payload.Issue.Url
-	fmt.Println(message, repository_name, issue_url)
-	return fmt.Errorf("f")
-}
-
-var dispatcher = setupHandlers()
+var dp = setupHandlers()
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -158,7 +32,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	webhookUrl := r.PathValue("webhookUrl")
-	hook := github_webhook{}
+	hook := webhook.Github_webhook{}
 	hook.Id = webhookUrl
 	action := r.Header.Get("X-GitHub-Event")
 	if action == "" {
@@ -173,14 +47,70 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	if err := dispatcher.Handle(action, &hook); err != nil {
+	if err := dp.Handle(action, &hook); err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
 
 }
 
-func main() {
+func Chain(handler http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		handler = middlewares[i](handler)
+	}
+	return handler
+}
+
+func LoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		next.ServeHTTP(w, r)
+
+		log.Printf(
+			"[INFO] %s - %s - %s",
+			r.Method,
+			r.URL.Path,
+			time.Since(start),
+		)
+	})
+}
+
+func ExampleSendMessage() {
+	// Создаём сообщение
+	message := &pb.Message{
+		Event:     "push",
+		Comment:   "Fixed bug in authentication",
+		ChatId:    123456789,
+		ThreadId:  0,
+		Author:    "john_doe",
+		AuthorUrl: "https://github.com/john_doe",
+		RepName:   "my-repository",
+		RepUrl:    "https://github.com/user/my-repository",
+	}
+
+	// Отправляем сообщение на локальный сервер
+	if err := grpc.SendMessage(message); err != nil {
+		log.Printf("Error sending message: %v", err)
+	}
+}
+
+func Start() {
+	// Запуск gRPC сервера в горутине
+	// go func() {
+	// 	if err := grpc.StartServer(":50051"); err != nil {
+	// 		log.Fatalf("Failed to start gRPC server: %v", err)
+	// 	}
+	// }()
+	// Запуск HTTP сервера
+	ExampleSendMessage()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /github-webhook/{webhookUrl}", handleWebhook)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	FinalMux := Chain(mux, LoggingMiddleware)
+	log.Fatal(http.ListenAndServe(":8080", FinalMux))
+}
+
+func main() {
+	// cmd.Execute()
+	Start()
+
 }

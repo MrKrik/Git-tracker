@@ -36,10 +36,6 @@ async def get_id(message: types.Message):
 async def get_id(message: types.Message):
     await message.answer(f'{message.message_thread_id}')
 
-@dp.message(Command('user'))
-async def get_id(message: types.Message):
-    await message.answer(f'{message.chat.id}')
-
 async def webhook_send(message, channel_id, thread_id, web_preview = True):
     # todo no if str thread problem check go server response
     if thread_id == "None":

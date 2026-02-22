@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package hook;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "./"; 
+
+message Message {
+  string event = 1;
+  string comment = 2;
+  uint64 chat_id = 3;
+  uint64 thread_id = 4;
+  string author = 5;
+  string author_url = 8;
+  string rep_name = 6;
+  string rep_url = 7;
+}
+service SendMessage {
+  rpc SendMessage(Message) returns (google.protobuf.Empty);
+}
