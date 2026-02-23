@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # MongoDB база данных
+  mongodb:
+    image: mongo:7.0-alpine
+    container_name: telegram_bot_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: telegram_bot
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - telegram_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Mongo Express - веб-интерфейс для MongoDB (опционально)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: telegram_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH: false
+    ports:
+      - "8081:8081"
+    networks:
+      - telegram_network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # Go Webhook Server
+  webhook_server:
+    build:
+      context: ./webhook_server
+      dockerfile: Dockerfile
+    container_name: telegram_webhook_server_mongo
+    environment:
+      BOT_URL: http://bot:5000
+      GRPC_PORT: "50051"
+      HTTP_PORT: "8080"
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - ./webhook_server:/build
+    networks:
+      - telegram_network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # Python Telegram Bot
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: telegram_bot_app_mongo
+    environment:
+      TOKEN: ${TOKEN}
+      URL: ${URL}
+      # MongoDB connection string
+      DB_URL: mongodb://admin:password@mongodb:27017/telegram_bot?authSource=admin
+      TEST_SERVER: http://webhook_server:8080
+      GRPC_SERVER: webhook_server:50051
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./bot:/code
+    networks:
+      - telegram_network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      webhook_server:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+networks:
+  telegram_network:
+    driver: bridge

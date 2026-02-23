@@ -95,12 +95,6 @@ func ExampleSendMessage() {
 }
 
 func Start() {
-	// Запуск gRPC сервера в горутине
-	// go func() {
-	// 	if err := grpc.StartServer(":50051"); err != nil {
-	// 		log.Fatalf("Failed to start gRPC server: %v", err)
-	// 	}
-	// }()
 	// Запуск HTTP сервера
 	ExampleSendMessage()
 	mux := http.NewServeMux()

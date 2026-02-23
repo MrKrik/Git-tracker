@@ -9,12 +9,12 @@ import (
 
 func Push(payload *webhook.Github_webhook) error {
 
-	event := "Сделан коммит"
-	repository_name := payload.Repository.Full_name
-	rep_link := payload.Repository.Html_url
-	author_name := payload.Sender.Login
-	author_url := payload.Sender.Url
-	comment := payload.Head_commit.Message
+	event := payload.GetEventType()
+	repository_name := payload.GetRepositoryName()
+	rep_link := payload.GetRepositoryURL()
+	author_name := payload.GetAuthorLogin()
+	author_url := payload.GetAuthorURL()
+	comment := payload.GetCommitMessage()
 
 	rep := &pb.Message{
 		Event:     event,

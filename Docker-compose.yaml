@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:16-alpine
+    container_name: telegram_bot_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: telegram_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - telegram_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Go Webhook Server
+  webhook_server:
+    build:
+      context: ./webhook_server
+      dockerfile: Dockerfile
+    container_name: telegram_webhook_server
+    environment:
+      BOT_URL: http://bot:5000
+      GRPC_PORT: "50051"
+      HTTP_PORT: "8080"
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - ./webhook_server:/build
+    networks:
+      - telegram_network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  # Python Telegram Bot
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: telegram_bot_app
+    environment:
+      TOKEN: ${TOKEN}
+      URL: ${URL}
+      DB_URL: postgresql://postgres:postgres@postgres:5432/telegram_bot
+      TEST_SERVER: http://webhook_server:8080
+      GRPC_SERVER: webhook_server:50051
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./bot:/code
+    networks:
+      - telegram_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webhook_server:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  telegram_network:
+    driver: bridge
