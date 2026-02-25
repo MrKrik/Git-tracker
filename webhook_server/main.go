@@ -96,7 +96,11 @@ func ExampleSendMessage() {
 
 func Start() {
 	// Запуск HTTP сервера
-	ExampleSendMessage()
+	go func() {
+		if err := grpc.StartServer(":50051"); err != nil {
+			log.Fatalf("Failed to start gRPC server: %v", err)
+		}
+	}()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /github-webhook/{webhookUrl}", handleWebhook)
 	FinalMux := Chain(mux, LoggingMiddleware)
