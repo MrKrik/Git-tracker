@@ -18,6 +18,11 @@ blinker==1.9.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
 
+# gRPC & Protocol Buffers
+grpcio==1.62.0
+grpcio-tools==1.62.0
+protobuf==5.27.1
+
 # Database
 pymongo==4.13.0
 

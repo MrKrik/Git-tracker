@@ -15,10 +15,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram import F
 from handlers import create_webhook, view_webhooks
 from keyboards import menu
-from aiogram import types
+from grpc_server import start_grpc_server
 
 load_dotenv()
-
 # Конфигурация логирования
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -100,13 +99,23 @@ async def webhook_send(
 
 
 async def main() -> None:
-    """Основная функция для запуска бота."""
+    """Основная функция для запуска бота и gRPC сервера."""
     try:
+        # Подготовить роутеры бота
         dp.include_router(create_webhook.router)
         dp.include_router(view_webhooks.router)
+        
+        # Удалить webhook если существует
         await bot.delete_webhook(drop_pending_updates=True)
+        
+        # Запустить gRPC сервер в отдельной задаче
+        grpc_task = start_grpc_server(webhook_send_callback=webhook_send)
+        logger.info("gRPC сервер запущен")
+        
+        # Запустить Telegram бот
         logger.info("Бот запущен в режиме polling")
         await dp.start_polling(bot)
+        
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}")
         raise

@@ -26,7 +26,7 @@ async def view_webhooks_list(callback: types.CallbackQuery) -> None:
         user_id = callback.message.chat.id
         
         # Получить список webhooks
-        webhooks_list = db.get_user_webhooks(user_id)
+        webhooks_list = await db.get_user_webhooks(user_id)
         
         if not webhooks_list:
             await callback.message.edit_text(
@@ -87,7 +87,7 @@ async def view_webhook_info(callback: types.CallbackQuery) -> None:
         webhook_name = callback.data.split("_", 1)[1]
         
         # Получить информацию о webhook
-        webhook_info = db.get_webhook_info(webhook_name)
+        webhook_info =  await db.get_webhooks_info(webhook_name)
         
         if webhook_info is None:
             await callback.message.edit_text(
@@ -144,7 +144,7 @@ async def delete_webhook_handler(callback: types.CallbackQuery) -> None:
         webhook_name = callback.data.split("_", 1)[1]
         
         # Удалить webhook
-        success = db.delete_webhook(webhook_name)
+        success = await db.delete_webhook(webhook_name)
         
         if not success:
             await callback.message.edit_text(

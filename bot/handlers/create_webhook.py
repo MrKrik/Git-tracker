@@ -40,15 +40,7 @@ def generate_webhook_url(name: str, user_id: int) -> str:
     """
     random_suffix = ''.join(choices(ascii_letters, k=20))
     webhook_id = random_suffix
-    
-    db.add(
-        name=name,
-        url=webhook_id,
-        author_id=user_id,
-        channel_id=None,  # Будет заполнено позже
-        thread_id=None,   # Будет заполнено позже
-    )
-    
+        
     full_url = f"{SERVER_URL}/github-webhook/{webhook_id}"
     logger.info(f"Сгенерирован webhook для пользователя {user_id}: {name}")
     return full_url
@@ -123,14 +115,14 @@ async def process_thread_id(message: types.Message, state: FSMContext) -> None:
     
     try:
         # Обновить информацию webhook в БД
-        db.delete_webhook(data['name'])
+        await db.delete_webhook(data['name'])
         webhook_url = generate_webhook_url(
             name=data['name'],
             user_id=data['user_id']
         )
         
         # Сохранить webhook с полной информацией
-        db.add(
+        await db.add(
             name=data['name'],
             url=webhook_url.split('/')[-1],
             author_id=data['user_id'],
